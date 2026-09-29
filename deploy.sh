@@ -2,7 +2,7 @@
 # Construit l'app et la publie sur la branche gh-pages (GitHub Pages).
 set -e
 cd "$(dirname "$0")"
-REMOTE=$(git remote get-url origin)
+REMOTE=${DEPLOY_REMOTE:-$(git remote get-url origin)}
 npm run build
 cp dist/index.html dist/404.html   # /admin fonctionne via le repli SPA
 touch dist/.nojekyll
