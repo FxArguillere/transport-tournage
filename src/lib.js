@@ -9,8 +9,12 @@ const KEY = import.meta.env.VITE_ORS_KEY
 
 export const TRANSPORTS = [
   ['voiture', 'Voiture'], ['bus', 'Bus'], ['train', 'Train'],
-  ['tram', 'Tram'], ['velo', 'Vélo'], ['pied', 'À pied']
+  ['tram', 'Tram'], ['velo', 'Vélo'], ['pied', 'À pied'],
+  ['taxi', 'Taxi'], ['moto', 'Moto']
 ]
+export const TRANSPORT_ICONS = {
+  voiture: '🚗', bus: '🚌', train: '🚆', tram: '🚋', velo: '🚲', pied: '🚶', taxi: '🚕', moto: '🛵'
+}
 export const ENGINES = [
   ['thermique_hybride', 'Thermique / hybride'], ['essence', 'Essence'], ['diesel', 'Diesel']
 ]
@@ -38,6 +42,18 @@ export const daysBetween = (a, b, max = 62) => {
   const d = new Date(a + 'T12:00:00'), e = new Date(b + 'T12:00:00')
   while (d <= e && out.length < max) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1) }
   return out
+}
+
+// Comparaison de noms sans accents ni casse
+export const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+export const legTotal = l => (l.oneWay == null ? 0 : Math.round(l.oneWay * (l.round ? 2 : 1) * 100) / 100)
+
+export async function reverseGeo(lat, lon) {
+  const q = new URLSearchParams({ api_key: KEY, 'point.lat': lat, 'point.lon': lon, size: '1' })
+  const r = await fetch(`${ORS}/geocode/reverse?${q}`)
+  if (!r.ok) throw new Error('reverse')
+  const j = await r.json()
+  return j.features?.[0]?.properties?.label || null
 }
 
 export const isActive = (loc, date) => loc.start_date <= date && date <= loc.end_date

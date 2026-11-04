@@ -162,7 +162,7 @@ async function fetchTrips(from, to) {
   for (let i = 0; ; i += 1000) {
     const { data, error } = await supabase.from('trips').select('*')
       .gte('trip_date', from).lte('trip_date', to)
-      .order('trip_date').order('created_at').range(i, i + 999)
+      .order('trip_date').order('member_name').order('created_at').order('leg').range(i, i + 999)
     if (error) throw error
     all.push(...data)
     if (data.length < 1000) break
@@ -183,14 +183,14 @@ function Export() {
   function download() {
     const oui = b => (b ? 'Oui' : 'Non')
     const data = rows.map(t => ({
-      'Nom': t.member_name, 'Date': fr(t.trip_date),
+      'Nom': t.member_name, 'Date': fr(t.trip_date), 'Étape': `${t.leg}/${t.legs_total}`,
       'Adresse départ': t.start_address, 'Adresse arrivée': t.end_address,
       'Km calculés': Number(t.km_total), 'Aller/retour': oui(t.round_trip),
       'Type de transport': transportLabel(t.transport), 'Type de moteur': engineLabel(t.engine),
       'Covoiturage': oui(t.carpool), 'Nom du chauffeur': t.driver_name || ''
     }))
     const ws = XLSX.utils.json_to_sheet(data)
-    ws['!cols'] = [22, 11, 40, 40, 12, 12, 16, 20, 12, 22].map(wch => ({ wch }))
+    ws['!cols'] = [22, 11, 8, 40, 40, 12, 12, 16, 20, 12, 22].map(wch => ({ wch }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Transports')
     XLSX.writeFile(wb, `transports_${from}_${to}.xlsx`)
@@ -208,9 +208,9 @@ function Export() {
       {rows && (
         <>
           <p className="hint">{rows.length} trajet(s). Aperçu des 50 premiers.</p>
-          <div className="scroll"><table><thead><tr><th>Nom</th><th>Date</th><th>Km</th><th>A/R</th><th>Transport</th><th>Covoit.</th></tr></thead>
+          <div className="scroll"><table><thead><tr><th>Nom</th><th>Date</th><th>Étape</th><th>Km</th><th>A/R</th><th>Transport</th><th>Covoit.</th></tr></thead>
             <tbody>{rows.slice(0, 50).map(t => (
-              <tr key={t.id}><td>{t.member_name}</td><td>{fr(t.trip_date)}</td><td>{Number(t.km_total).toFixed(2)}</td>
+              <tr key={t.id}><td>{t.member_name}</td><td>{fr(t.trip_date)}</td><td>{t.leg}/{t.legs_total}</td><td>{Number(t.km_total).toFixed(2)}</td>
                 <td>{t.round_trip ? 'Oui' : 'Non'}</td>
                 <td>{transportLabel(t.transport)}{t.engine ? ` (${engineLabel(t.engine)})` : ''}</td>
                 <td>{t.carpool ? `Oui – ${t.driver_name}` : 'Non'}</td></tr>

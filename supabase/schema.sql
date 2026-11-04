@@ -25,11 +25,13 @@ create table trips (
   end_address text not null check (char_length(end_address) <= 300),
   km_total numeric(8,2) not null check (km_total >= 0 and km_total < 2000),
   round_trip boolean not null,
-  transport text not null check (transport in ('voiture','bus','train','tram','velo','pied')),
+  transport text not null check (transport in ('voiture','bus','train','tram','velo','pied','taxi','moto')),
   engine text check (engine in ('thermique_hybride','essence','diesel')),
   carpool boolean not null default false,
   driver_name text check (char_length(driver_name) <= 120),
-  location_id uuid references locations(id) on delete set null
+  location_id uuid references locations(id) on delete set null,
+  leg smallint not null default 1 check (leg between 1 and 4),
+  legs_total smallint not null default 1 check (legs_total between 1 and 4)
 );
 create index trips_date_idx on trips (trip_date);
 
