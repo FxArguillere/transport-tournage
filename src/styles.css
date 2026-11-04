@@ -77,3 +77,6 @@ th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{col
 .field{position:relative}.field .in{padding-right:40px}
 .clear{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;border-radius:50%;background:transparent;color:var(--mut);font-size:16px;cursor:pointer}
 .ver{text-align:center;font-size:11px;color:var(--mut);padding:0 0 24px}
+
+.swap{display:block;margin:12px auto 0;background:transparent;border:1px solid var(--line);color:var(--ac);border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
+.swap:disabled{opacity:.4;cursor:not-allowed}

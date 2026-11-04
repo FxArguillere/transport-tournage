@@ -14,7 +14,7 @@ export default function AddressInput({ value, onChange, placeholder, locate }) {
   const input = useRef(null)
 
   useEffect(() => {
-    if (!typed.current || value.text.trim().length < 3) { setList([]); setSearchErr(false); setNoResult(false); setLoading(false); return }
+    if (!typed.current || value.lat != null || value.text.trim().length < 3) { setList([]); setSearchErr(false); setNoResult(false); setLoading(false); return }
     setNoResult(false)
     const ac = new AbortController()
     const t = setTimeout(async () => {

@@ -49,11 +49,13 @@ function NamePicker({ members, value, onChange, label, placeholder }) {
 const sameSpot = (a, l) => a.lat != null && a.lat === l.lat && a.lon === l.lon
 
 function ArrivalPicker({ value, onChange, choices }) {
-  const [custom, setCustom] = useState(() => value.text !== '' && !choices.some(l => sameSpot(value, l)))
+  const [picked, setPicked] = useState(false) // « Autre adresse… » choisi explicitement
   const [geoBusy, setGeoBusy] = useState(false)
   const [geoErr, setGeoErr] = useState(false)
   const sel = choices.find(l => sameSpot(value, l))
+  const custom = picked || (value.text !== '' && !sel)  // une adresse hors liste s'affiche toujours en champ
   const current = custom ? '__custom' : sel ? sel.id : ''
+  const setCustom = setPicked
 
   const change = e => {
     const v = e.target.value
@@ -64,7 +66,7 @@ function ArrivalPicker({ value, onChange, choices }) {
   }
   const here = async () => {
     setGeoBusy(true); setGeoErr(false)
-    try { const a = await locateMe(); setCustom(true); onChange(a) } catch { setGeoErr(true) }
+    try { const a = await locateMe(); setPicked(true); onChange(a) } catch { setGeoErr(true) }
     setGeoBusy(false)
   }
 
@@ -91,7 +93,7 @@ function ArrivalPicker({ value, onChange, choices }) {
 }
 
 /* ---------- Une étape (un moyen de transport) ---------- */
-function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, places, submitLabel }) {
+function LegEditor({ initial, heading, pos, onPos, legCount, members, onSubmit, onBack, places, submitLabel }) {
   const [transport, setTransport] = useState(initial.transport || '')
   const [engine, setEngine] = useState(initial.engine || '')
   const [carpool, setCarpool] = useState(!!initial.carpool)
@@ -139,12 +141,12 @@ function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, pl
               <input type="radio" name="pos" checked={pos === 'before'} onChange={() => onPos('before')} />Avant le premier
             </label>
             <label className={pos === 'after' ? 'on' : ''}>
-              <input type="radio" name="pos" checked={pos === 'after'} onChange={() => onPos('after')} />Après le dernier
+              <input type="radio" name="pos" checked={pos === 'after'} onChange={() => onPos('after')} />{legCount > 1 ? 'Après le dernier' : 'Après le premier'}
             </label>
           </div>
           <p className="hint">{pos === 'before'
-            ? 'Le départ est copié depuis le premier trajet. Saisir l’arrivée.'
-            : 'Le départ est pré-rempli avec l’arrivée du dernier trajet. Saisir l’arrivée.'}</p>
+            ? 'L’arrivée est pré-remplie avec le départ du premier trajet. Saisir le départ.'
+            : 'Le départ est pré-rempli avec l’arrivée du trajet précédent. Saisir l’arrivée.'}</p>
         </>
       )}
 
@@ -174,6 +176,9 @@ function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, pl
 
       <label>Départ</label>
       <AddressInput value={start} onChange={setStart} placeholder="Rue, numéro, ville" locate />
+      <button type="button" className="swap" disabled={!start.text && !end.text}
+        onClick={() => { setStart(end); setEnd(start) }}>⇅ Permuter départ et arrivée</button>
+
       <label>Arrivée</label>
       <ArrivalPicker value={end} onChange={setEnd} choices={places} />
 
@@ -242,7 +247,11 @@ function DatePicker({ days, selected, onToggle, today }) {
 
 /* ---------- Application ---------- */
 export default function Public() {
-  const memo = useMemo(() => load(MEM) || {}, [])
+  const memo = useMemo(() => {
+    const m = load(MEM) || {}
+    const ok = typeof m.name === 'string' && m.name.trim() && !m.name.startsWith('__')
+    return ok ? m : {}   // utilisateur non reconnu : pas d'accueil personnalisé
+  }, [])
   const today = todayStr()
   const [members, setMembers] = useState([])
   const [locations, setLocations] = useState([])
@@ -384,7 +393,7 @@ export default function Public() {
     const first = !editing && addPos == null
     const initial = editing ? legs[editIdx]
       : first ? { start: memo.legs?.[0]?.start || memo.start || emptyAddr, end: arrival }
-      : addPos === 'before' ? { start: legs[0].start, end: emptyAddr }
+      : addPos === 'before' ? { start: emptyAddr, end: legs[0].start }
       : { start: legs[legs.length - 1].end, end: emptyAddr }
     const heading = editing ? 'Modifier ce trajet' : first ? 'Comment êtes-vous venu·e ?' : 'Autre moyen de transport'
     const back = () => {
@@ -396,7 +405,7 @@ export default function Public() {
       <main className="wrap">
         <Prog n={2} />
         <LegEditor key={`${editIdx}-${addPos}-${legs.length}`} initial={initial} heading={heading}
-          pos={editing ? null : addPos} onPos={setAddPos} members={members} onBack={back}
+          pos={editing ? null : addPos} onPos={setAddPos} legCount={legs.length} members={members} onBack={back}
           places={locations}
           onSubmit={saveLeg} submitLabel={editing ? 'Enregistrer' : 'Continuer'} />
       </main>
