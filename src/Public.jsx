@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import AddressInput from './AddressInput.jsx'
 import {
   supabase, TRANSPORTS, TRANSPORT_ICONS, ENGINES, todayStr, titleCase, norm, isActive,
-  routeKm, legTotal, daysBetween, load, save, transportLabel
+  routeKm, legTotal, daysBetween, load, save, transportLabel, locateMe
 } from './lib.js'
 
 const MEM = 'transport.memo'
@@ -29,9 +29,12 @@ function NamePicker({ members, value, onChange, label, placeholder }) {
   return (
     <div className="addr">
       <label>{label}</label>
-      <input className="in" value={text} placeholder={placeholder} autoComplete="off"
-        onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
-        onChange={e => { setText(e.target.value); setOpen(true) }} />
+      <div className="field">
+        <input className="in" value={text} placeholder={placeholder} autoComplete="off"
+          onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}
+          onChange={e => { setText(e.target.value); setOpen(true) }} />
+        {text && <button type="button" className="clear" aria-label="Effacer" onPointerDown={e => { e.preventDefault(); setText('') }}>✕</button>}
+      </div>
       {open && list.length > 0 && !exact && (
         <ul className="sug">
           {list.map(m => <li key={m} onPointerDown={e => { e.preventDefault(); setText(m); setOpen(false) }}>{m}</li>)}
@@ -42,8 +45,53 @@ function NamePicker({ members, value, onChange, label, placeholder }) {
   )
 }
 
+/* ---------- Arrivée : lieux de tournage ou autre adresse ---------- */
+const sameSpot = (a, l) => a.lat != null && a.lat === l.lat && a.lon === l.lon
+
+function ArrivalPicker({ value, onChange, choices }) {
+  const [custom, setCustom] = useState(() => value.text !== '' && !choices.some(l => sameSpot(value, l)))
+  const [geoBusy, setGeoBusy] = useState(false)
+  const [geoErr, setGeoErr] = useState(false)
+  const sel = choices.find(l => sameSpot(value, l))
+  const current = custom ? '__custom' : sel ? sel.id : ''
+
+  const change = e => {
+    const v = e.target.value
+    if (v === '__custom') { setCustom(true); onChange(emptyAddr); return }
+    setCustom(false)
+    const l = choices.find(x => x.id === v)
+    onChange(l ? { text: l.address, lat: l.lat, lon: l.lon } : emptyAddr)
+  }
+  const here = async () => {
+    setGeoBusy(true); setGeoErr(false)
+    try { const a = await locateMe(); setCustom(true); onChange(a) } catch { setGeoErr(true) }
+    setGeoBusy(false)
+  }
+
+  return (
+    <>
+      <select className="in" value={current} onChange={change}>
+        <option value="">Choisir…</option>
+        {choices.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+        <option value="__custom">Autre adresse…</option>
+      </select>
+      {sel && !custom && <p className="hint">{sel.address}</p>}
+      {custom
+        ? <AddressInput value={value} onChange={onChange} placeholder="Rue, numéro, ville" locate />
+        : (
+          <>
+            <button type="button" className="locate" onClick={here} disabled={geoBusy}>
+              {geoBusy ? 'Localisation…' : '📍 Utiliser ma position'}
+            </button>
+            {geoErr && <p className="hint">Position indisponible : choisir dans la liste ou saisir l’adresse.</p>}
+          </>
+        )}
+    </>
+  )
+}
+
 /* ---------- Une étape (un moyen de transport) ---------- */
-function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, locChoices, onLoc, submitLabel }) {
+function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, places, submitLabel }) {
   const [transport, setTransport] = useState(initial.transport || '')
   const [engine, setEngine] = useState(initial.engine || '')
   const [carpool, setCarpool] = useState(!!initial.carpool)
@@ -95,8 +143,8 @@ function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, lo
             </label>
           </div>
           <p className="hint">{pos === 'before'
-            ? 'L’arrivée est pré-remplie avec le départ du premier trajet.'
-            : 'Le départ est pré-rempli avec l’arrivée du dernier trajet.'}</p>
+            ? 'Le départ est copié depuis le premier trajet. Saisir l’arrivée.'
+            : 'Le départ est pré-rempli avec l’arrivée du dernier trajet. Saisir l’arrivée.'}</p>
         </>
       )}
 
@@ -124,23 +172,10 @@ function LegEditor({ initial, heading, pos, onPos, members, onSubmit, onBack, lo
         </>
       )}
 
-      {locChoices.length > 1 && (
-        <>
-          <label>Lieu de tournage</label>
-          <select className="in" defaultValue="" onChange={e => {
-            const l = locChoices.find(x => x.id === e.target.value)
-            if (l) { onLoc(l.id); setEnd({ text: l.address, lat: l.lat, lon: l.lon }) }
-          }}>
-            <option value="">Choisir…</option>
-            {locChoices.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-        </>
-      )}
-
       <label>Départ</label>
       <AddressInput value={start} onChange={setStart} placeholder="Rue, numéro, ville" locate />
       <label>Arrivée</label>
-      <AddressInput value={end} onChange={setEnd} placeholder="Rue, numéro, ville" />
+      <ArrivalPicker value={end} onChange={setEnd} choices={places} />
 
       <label className="tog">
         <span>Aller/retour</span>
@@ -219,7 +254,6 @@ export default function Public() {
   const [editIdx, setEditIdx] = useState(null)
   const [addPos, setAddPos] = useState(null)
   const [dates, setDates] = useState([])
-  const [locId, setLocId] = useState('')
   const [sent, setSent] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -255,8 +289,11 @@ export default function Public() {
     locations.filter(l => l.start_date > today).sort((a, b) => a.start_date.localeCompare(b.start_date))[0]
     || locations.filter(l => l.end_date < today).sort((a, b) => b.end_date.localeCompare(a.end_date))[0]
   ), [locations])
-  const loc = locations.find(l => l.id === locId) || activeToday[0] || fallbackLoc
-  const arrival = loc ? { text: loc.address, lat: loc.lat, lon: loc.lon } : emptyAddr
+  const loc = activeToday[0] || fallbackLoc
+  // Pré-sélection de l'arrivée seulement s'il y a un seul lieu actif aujourd'hui
+  const arrival = activeToday.length === 1
+    ? { text: activeToday[0].address, lat: activeToday[0].lat, lon: activeToday[0].lon }
+    : emptyAddr
 
   const toggleDate = d => setDates(x => (x.includes(d) ? x.filter(y => y !== d) : [...x, d].sort()))
   const totalDay = legs.reduce((a, l) => a + legTotal(l), 0)
@@ -291,7 +328,7 @@ export default function Public() {
     setBusy(true); setError('')
     const sorted = [...dates].sort()
     const rows = sorted.flatMap(d => {
-      const l = locations.find(x => x.id === loc?.id && isActive(x, d)) || locations.find(x => isActive(x, d))
+      const l = locations.find(x => isActive(x, d) && legs.some(g => sameSpot(g.end, x))) || locations.find(x => isActive(x, d))
       return legs.map((g, i) => ({
         member_name: name, trip_date: d,
         start_address: g.start.text, end_address: g.end.text, km_total: legTotal(g),
@@ -347,8 +384,8 @@ export default function Public() {
     const first = !editing && addPos == null
     const initial = editing ? legs[editIdx]
       : first ? { start: memo.legs?.[0]?.start || memo.start || emptyAddr, end: arrival }
-      : addPos === 'before' ? { start: emptyAddr, end: legs[0].start }
-      : { start: legs[legs.length - 1].end, end: arrival }
+      : addPos === 'before' ? { start: legs[0].start, end: emptyAddr }
+      : { start: legs[legs.length - 1].end, end: emptyAddr }
     const heading = editing ? 'Modifier ce trajet' : first ? 'Comment êtes-vous venu·e ?' : 'Autre moyen de transport'
     const back = () => {
       if (editing) { setEditIdx(null); setStep('recap') }
@@ -360,7 +397,7 @@ export default function Public() {
         <Prog n={2} />
         <LegEditor key={`${editIdx}-${addPos}-${legs.length}`} initial={initial} heading={heading}
           pos={editing ? null : addPos} onPos={setAddPos} members={members} onBack={back}
-          locChoices={first ? activeToday : []} onLoc={setLocId}
+          places={locations}
           onSubmit={saveLeg} submitLabel={editing ? 'Enregistrer' : 'Continuer'} />
       </main>
     )

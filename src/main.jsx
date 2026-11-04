@@ -5,4 +5,9 @@ import Admin from './Admin.jsx'
 import './styles.css'
 
 const isAdmin = location.pathname.replace(/\/$/, '').endsWith('/admin')
-createRoot(document.getElementById('root')).render(isAdmin ? <Admin /> : <Public />)
+createRoot(document.getElementById('root')).render(
+  <>
+    {isAdmin ? <Admin /> : <Public />}
+    <footer className="ver">Version {__APP_VERSION__}</footer>
+  </>
+)
