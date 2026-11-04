@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import AddressInput from './AddressInput.jsx'
-import { supabase, TRANSPORTS, ENGINES, todayStr, titleCase, isActive, routeKm, load, save, transportLabel } from './lib.js'
+import { supabase, TRANSPORTS, ENGINES, todayStr, titleCase, isActive, routeKm, fmtDay, daysBetween, load, save, transportLabel } from './lib.js'
 
 const MEM = 'transport.memo'
 const OTHER = '__other'
@@ -47,7 +47,10 @@ export default function Public() {
   const [calc, setCalc] = useState('idle') // idle | loading | ok | error
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [done, setDone] = useState(null)
+  const [done, setDone] = useState(false)
+  const [extra, setExtra] = useState([])      // autres dates cochées (mêmes trajets)
+  const [pickDate, setPickDate] = useState('')
+  const [sent, setSent] = useState([])        // trajets déjà encodés dans cette session
 
   useEffect(() => {
     (async () => {
@@ -62,6 +65,19 @@ export default function Public() {
   }, [])
 
   const active = useMemo(() => locations.filter(l => isActive(l, date)), [locations, date])
+
+  // Dates proposées : jours du/des lieux actifs + dates ajoutées à la main
+  const candidates = useMemo(() => {
+    const set = new Set(extra)
+    active.forEach(l => daysBetween(l.start_date, l.end_date).forEach(d => set.add(d)))
+    set.delete(date)
+    return [...set].sort()
+  }, [active, extra, date])
+  const toggleExtra = d => setExtra(x => (x.includes(d) ? x.filter(y => y !== d) : [...x, d]))
+  const addPicked = () => {
+    if (pickDate && pickDate !== date && !extra.includes(pickDate)) setExtra(x => [...x, pickDate])
+    setPickDate('')
+  }
 
   // Lieu actif → adresse d'arrivée (sauf si modifiée à la main par l'utilisateur)
   useEffect(() => {
@@ -97,33 +113,54 @@ export default function Public() {
   const ready = finalName && transport && total != null && calc === 'ok'
     && (!isCar || engine) && (!isCar || !carpool || finalDriver)
 
+  const resetTrip = () => {
+    setStart(emptyAddr); setTransport(''); setEngine(''); setCarpool(false); setDriver(''); setCustomDriver('')
+    setEndEdited(false); setRound(true); setError('')
+    const l = active.find(x => x.id === locId) || active[0]
+    setEnd(l ? { text: l.address, lat: l.lat, lon: l.lon } : emptyAddr)
+  }
+
   async function submit(e) {
     e.preventDefault()
     if (!ready || busy) return
     setBusy(true); setError('')
-    const row = {
-      member_name: finalName, trip_date: date,
-      start_address: start.text, end_address: end.text, km_total: total,
-      round_trip: round, transport,
-      engine: isCar ? engine : null,
-      carpool: isCar && carpool,
-      driver_name: isCar && carpool ? finalDriver : null,
-      location_id: locId || null
-    }
-    const { error: err } = await supabase.from('trips').insert(row)
+    const dates = [date, ...extra.filter(d => d !== date)].sort()
+    const rows = dates.map(d => {
+      const loc = locations.find(l => l.id === locId && isActive(l, d)) || locations.find(l => isActive(l, d))
+      return {
+        member_name: finalName, trip_date: d,
+        start_address: start.text, end_address: end.text, km_total: total,
+        round_trip: round, transport,
+        engine: isCar ? engine : null,
+        carpool: isCar && carpool,
+        driver_name: isCar && carpool ? finalDriver : null,
+        location_id: loc ? loc.id : null
+      }
+    })
+    const { error: err } = await supabase.from('trips').insert(rows)
     setBusy(false)
     if (err) { setError('Enregistrement impossible. Vérifier la connexion puis réessayer.'); return }
     save(MEM, { name, customName, start, transport, round, engine })
-    setDone(row)
+    setSent(s => [...s, { transport, km: total, round, dates, engine: isCar ? engine : null }])
+    setDone(true)
   }
 
   if (done) return (
     <main className="wrap center">
       <div className="okc">✓</div>
-      <h1>Trajet enregistré</h1>
-      <p className="mut">{done.member_name} · {done.trip_date.split('-').reverse().join('/')}<br />
-        {transportLabel(done.transport)} · {fmt(done.km_total)} km{done.round_trip ? ' (A/R)' : ''}</p>
-      <button className="btn sec" onClick={() => { setDone(null); setDate(todayStr()) }}>Déclarer un autre trajet</button>
+      <h1>{sent.length > 1 ? `${sent.length} trajets enregistrés` : 'Trajet enregistré'}</h1>
+      <p className="mut">{finalName}</p>
+      <ul className="recap">
+        {sent.map((t, i) => (
+          <li key={i}>
+            <b>{transportLabel(t.transport)}</b> · {fmt(t.km)} km{t.round ? ' (A/R)' : ''}
+            <small>{t.dates.length === 1 ? fmtDay(t.dates[0]) : `${t.dates.length} dates : ${t.dates.map(d => fmtDay(d)).join(', ')}`}</small>
+          </li>
+        ))}
+      </ul>
+      <p className="hint">Un autre mode de transport (ou un autre trajet) le même jour ? Ajouter un trajet.</p>
+      <button className="btn" onClick={() => { setDone(false); resetTrip() }}>Ajouter un autre trajet</button>
+      <button className="btn sec" onClick={() => { setDone(false); setSent([]); setExtra([]); setDate(todayStr()); resetTrip() }}>J’ai terminé</button>
     </main>
   )
 
@@ -185,8 +222,28 @@ export default function Public() {
           </>
         )}
 
+        <fieldset className="dates">
+          <legend>Avez-vous parcouru ces exacts mêmes trajets à d’autres dates ? <span className="mut">(plusieurs choix possibles)</span></legend>
+          <p className="hint">Vous ne devrez donc pas réencoder ces trajets. Si de nouveaux modes de transport s’ajoutent à d’autres dates, merci de faire un nouvel encodage.</p>
+          {candidates.length > 0 && (
+            <div className="chips">
+              {candidates.map(d => (
+                <label key={d} className={extra.includes(d) ? 'on' : ''}>
+                  <input type="checkbox" checked={extra.includes(d)} onChange={() => toggleExtra(d)} />{fmtDay(d)}
+                </label>
+              ))}
+            </div>
+          )}
+          <div className="inline gap">
+            <input type="date" className="in" value={pickDate} onChange={e => setPickDate(e.target.value)} aria-label="Autre date" />
+            <button type="button" className="btn sm sec" onClick={addPicked} disabled={!pickDate}>Ajouter cette date</button>
+          </div>
+        </fieldset>
+
         {error && <p className="err">{error}</p>}
-        <button className="btn" disabled={!ready || busy}>{busy ? 'Envoi…' : 'Valider'}</button>
+        <button className="btn" disabled={!ready || busy}>
+          {busy ? 'Envoi…' : extra.filter(d => d !== date).length ? `Valider (${extra.filter(d => d !== date).length + 1} dates)` : 'Valider'}
+        </button>
       </form>
     </main>
   )

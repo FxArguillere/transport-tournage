@@ -39,3 +39,14 @@ th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{col
 .grid{display:grid;grid-template-columns:2fr 3fr 1fr 1fr;gap:10px;align-items:end}.grid .btn{grid-column:1/-1;justify-self:start}
 @media (max-width:700px){.grid{grid-template-columns:1fr}}
 .scroll{overflow-x:auto}
+
+.dates{border:1px solid var(--line);border-radius:10px;margin:20px 0 0;padding:12px 12px 14px}
+.dates legend{font-size:14px;font-weight:600;padding:0 6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chips label{margin:0;border:1px solid var(--line);border-radius:99px;padding:8px 12px;font-size:13px;font-weight:500;background:var(--card)}
+.chips label.on{background:var(--ac);color:#fff;border-color:var(--ac)}.chips input{position:absolute;opacity:0;pointer-events:none}
+@media (prefers-color-scheme:dark){.chips label.on{color:#0f172a}}
+.dates .inline .in{flex:1;min-width:150px;width:auto}
+.recap{list-style:none;padding:0;margin:12px 0;text-align:left}
+.recap li{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;background:var(--card)}
+.recap small{display:block;color:var(--mut);margin-top:2px;font-size:13px}

@@ -27,6 +27,19 @@ export const titleCase = s =>
   s.trim().replace(/\s+/g, ' ').toLowerCase()
     .replace(/(^|[\s\-'’])(\p{L})/gu, (_, a, b) => a + b.toUpperCase())
 
+export const fmtDay = d => {
+  const [y, m, j] = d.split('-').map(Number)
+  const w = new Date(y, m - 1, j).toLocaleDateString('fr-BE', { weekday: 'short' })
+  return `${w} ${String(j).padStart(2, '0')}/${String(m).padStart(2, '0')}`
+}
+// Toutes les dates (YYYY-MM-DD) de a à b inclus, plafonné à max jours
+export const daysBetween = (a, b, max = 62) => {
+  const out = []
+  const d = new Date(a + 'T12:00:00'), e = new Date(b + 'T12:00:00')
+  while (d <= e && out.length < max) { out.push(d.toISOString().slice(0, 10)); d.setDate(d.getDate() + 1) }
+  return out
+}
+
 export const isActive = (loc, date) => loc.start_date <= date && date <= loc.end_date
 
 const geo = async (endpoint, text, signal) => {
