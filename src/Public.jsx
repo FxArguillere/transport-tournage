@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import AddressInput from './AddressInput.jsx'
+import AddressInput, { FieldHead, useLocate, markPick, recentlyPicked } from './AddressInput.jsx'
 import {
   supabase, TRANSPORTS, TRANSPORT_ICONS, ENGINES, todayStr, titleCase, norm, isActive,
-  routeKm, legTotal, daysBetween, load, save, transportLabel, locateMe
+  routeKm, legTotal, daysBetween, load, save, transportLabel
 } from './lib.js'
 
 const MEM = 'transport.memo'
@@ -48,54 +48,33 @@ function NamePicker({ members, value, onChange, label, placeholder }) {
 /* ---------- Arrivée : lieux de tournage ou autre adresse ---------- */
 const sameSpot = (a, l) => a.lat != null && a.lat === l.lat && a.lon === l.lon
 
-function ArrivalPicker({ value, onChange, choices }) {
+function ArrivalPicker({ label, value, onChange, choices }) {
   const [picked, setPicked] = useState(false) // « Autre adresse… » choisi explicitement
-  const [geoBusy, setGeoBusy] = useState(false)
-  const [geoErr, setGeoErr] = useState(false)
-  const geoTok = useRef(0)
   const sel = choices.find(l => sameSpot(value, l))
   const custom = picked || (value.text !== '' && !sel)  // une adresse hors liste s'affiche toujours en champ
   const current = custom ? '__custom' : sel ? sel.id : ''
-  const setCustom = setPicked
-
-  const cancelGeo = () => { geoTok.current++; setGeoBusy(false) }
+  const geo = useLocate(value.text, a => { setPicked(true); onChange(a) })
 
   const change = e => {
-    cancelGeo()
+    geo.cancel(); markPick()
     const v = e.target.value
-    if (v === '__custom') { setCustom(true); onChange(emptyAddr); return }
-    setCustom(false)
+    if (v === '__custom') { setPicked(true); onChange(emptyAddr); return }
+    setPicked(false)
     const l = choices.find(x => x.id === v)
     onChange(l ? { text: l.address, lat: l.lat, lon: l.lon } : emptyAddr)
-  }
-  const here = async () => {
-    const tok = ++geoTok.current
-    setGeoBusy(true); setGeoErr(false)
-    try {
-      const a = await locateMe()
-      if (tok === geoTok.current) { setPicked(true); onChange(a) }   // ignoré si le choix a changé entre-temps
-    } catch { if (tok === geoTok.current) setGeoErr(true) }
-    if (tok === geoTok.current) setGeoBusy(false)
   }
 
   return (
     <>
+      <FieldHead label={label} geo={geo} />
       <select className="in" value={current} onChange={change}>
         <option value="">Choisir…</option>
         {choices.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
         <option value="__custom">Autre adresse…</option>
       </select>
       {sel && !custom && <p className="hint">{sel.address}</p>}
-      {custom
-        ? <AddressInput value={value} onChange={onChange} placeholder="Rue, numéro, ville" locate />
-        : (
-          <>
-            <button type="button" className="locate" onClick={geoBusy ? cancelGeo : here}>
-              {geoBusy ? 'Localisation en cours… Annuler' : '📍 Utiliser ma position'}
-            </button>
-            {geoErr && <p className="hint">Position indisponible : choisir dans la liste ou saisir l’adresse.</p>}
-          </>
-        )}
+      {custom && <AddressInput value={value} onChange={onChange} placeholder="Rue, numéro, ville" />}
+      {geo.err && <p className="hint">Position indisponible : choisir dans la liste ou saisir l’adresse.</p>}
     </>
   )
 }
@@ -182,13 +161,11 @@ function LegEditor({ initial, heading, pos, onPos, legCount, members, onSubmit, 
         </>
       )}
 
-      <label>Départ</label>
-      <AddressInput value={start} onChange={setStart} placeholder="Rue, numéro, ville" locate />
+      <AddressInput label="Départ" value={start} onChange={setStart} placeholder="Rue, numéro, ville" locate />
       <button type="button" className="swap" disabled={!start.text && !end.text}
-        onClick={() => { setStart(end); setEnd(start) }}>⇅ Permuter départ et arrivée</button>
+        onClick={() => { if (recentlyPicked()) return; setStart(end); setEnd(start) }}>⇅ Permuter départ et arrivée</button>
 
-      <label>Arrivée</label>
-      <ArrivalPicker value={end} onChange={setEnd} choices={places} />
+      <ArrivalPicker label="Arrivée" value={end} onChange={setEnd} choices={places} />
 
       <label className="tog">
         <span>Aller/retour</span>

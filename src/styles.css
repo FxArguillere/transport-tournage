@@ -80,3 +80,6 @@ th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{col
 
 .swap{display:block;margin:12px auto 0;background:transparent;border:1px solid var(--line);color:var(--ac);border-radius:99px;padding:8px 16px;font-size:13px;font-weight:600;font-family:inherit;cursor:pointer}
 .swap:disabled{opacity:.4;cursor:not-allowed}
+
+.fhead{display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
+.fhead .locate{padding:0 0 4px;white-space:nowrap}
