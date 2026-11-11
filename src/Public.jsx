@@ -52,12 +52,16 @@ function ArrivalPicker({ value, onChange, choices }) {
   const [picked, setPicked] = useState(false) // « Autre adresse… » choisi explicitement
   const [geoBusy, setGeoBusy] = useState(false)
   const [geoErr, setGeoErr] = useState(false)
+  const geoTok = useRef(0)
   const sel = choices.find(l => sameSpot(value, l))
   const custom = picked || (value.text !== '' && !sel)  // une adresse hors liste s'affiche toujours en champ
   const current = custom ? '__custom' : sel ? sel.id : ''
   const setCustom = setPicked
 
+  const cancelGeo = () => { geoTok.current++; setGeoBusy(false) }
+
   const change = e => {
+    cancelGeo()
     const v = e.target.value
     if (v === '__custom') { setCustom(true); onChange(emptyAddr); return }
     setCustom(false)
@@ -65,9 +69,13 @@ function ArrivalPicker({ value, onChange, choices }) {
     onChange(l ? { text: l.address, lat: l.lat, lon: l.lon } : emptyAddr)
   }
   const here = async () => {
+    const tok = ++geoTok.current
     setGeoBusy(true); setGeoErr(false)
-    try { const a = await locateMe(); setPicked(true); onChange(a) } catch { setGeoErr(true) }
-    setGeoBusy(false)
+    try {
+      const a = await locateMe()
+      if (tok === geoTok.current) { setPicked(true); onChange(a) }   // ignoré si le choix a changé entre-temps
+    } catch { if (tok === geoTok.current) setGeoErr(true) }
+    if (tok === geoTok.current) setGeoBusy(false)
   }
 
   return (
@@ -82,8 +90,8 @@ function ArrivalPicker({ value, onChange, choices }) {
         ? <AddressInput value={value} onChange={onChange} placeholder="Rue, numéro, ville" locate />
         : (
           <>
-            <button type="button" className="locate" onClick={here} disabled={geoBusy}>
-              {geoBusy ? 'Localisation…' : '📍 Utiliser ma position'}
+            <button type="button" className="locate" onClick={geoBusy ? cancelGeo : here}>
+              {geoBusy ? 'Localisation en cours… Annuler' : '📍 Utiliser ma position'}
             </button>
             {geoErr && <p className="hint">Position indisponible : choisir dans la liste ou saisir l’adresse.</p>}
           </>

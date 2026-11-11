@@ -10,8 +10,12 @@ export default function AddressInput({ value, onChange, placeholder, locate }) {
   const [loading, setLoading] = useState(false)
   const [geoBusy, setGeoBusy] = useState(false)
   const [geoErr, setGeoErr] = useState(false)
+  const [fromPos, setFromPos] = useState(false)
   const typed = useRef(false)
   const input = useRef(null)
+  const latest = useRef(value)
+  const geoTok = useRef(0)
+  latest.current = value
 
   useEffect(() => {
     if (!typed.current || value.lat != null || value.text.trim().length < 3) { setList([]); setSearchErr(false); setNoResult(false); setLoading(false); return }
@@ -26,21 +30,32 @@ export default function AddressInput({ value, onChange, placeholder, locate }) {
     return () => { clearTimeout(t); ac.abort() }
   }, [value.text])
 
+  // Toute action de l'utilisateur annule une localisation encore en attente
+  const cancelGeo = () => { geoTok.current++; setGeoBusy(false) }
+
   const pick = s => {
+    cancelGeo(); setFromPos(false)
     typed.current = false
     onChange({ text: s.label, lat: s.lat, lon: s.lon })
     setList([]); setOpen(false)
   }
   const clear = () => {
+    cancelGeo(); setFromPos(false)
     typed.current = false
     onChange({ text: '', lat: null, lon: null })
     setList([]); setSearchErr(false)
     input.current?.focus()
   }
   const here = async () => {
+    const tok = ++geoTok.current
+    const startText = value.text
     setGeoBusy(true); setGeoErr(false)
-    try { const a = await locateMe(); typed.current = false; onChange(a) } catch { setGeoErr(true) }
-    setGeoBusy(false)
+    try {
+      const a = await locateMe()
+      // Réponse ignorée si l'utilisateur a entre-temps tapé, choisi ou annulé
+      if (tok === geoTok.current && latest.current.text === startText) { typed.current = false; setFromPos(true); onChange(a) }
+    } catch { if (tok === geoTok.current) setGeoErr(true) }
+    if (tok === geoTok.current) setGeoBusy(false)
   }
 
   return (
@@ -50,7 +65,7 @@ export default function AddressInput({ value, onChange, placeholder, locate }) {
           ref={input} className="in" value={value.text} placeholder={placeholder}
           autoComplete="off" inputMode="text"
           onFocus={() => setOpen(true)}
-          onChange={e => { typed.current = true; setOpen(true); onChange({ text: e.target.value, lat: null, lon: null }) }}
+          onChange={e => { cancelGeo(); setFromPos(false); typed.current = true; setOpen(true); onChange({ text: e.target.value, lat: null, lon: null }) }}
           onBlur={() => { setOpen(false); if (value.lat == null && list[0]) pick(list[0]) }}
         />
         {value.text && (
@@ -71,10 +86,11 @@ export default function AddressInput({ value, onChange, placeholder, locate }) {
         <p className="hint">Aucune adresse trouvée : essayer avec le numéro et la ville.</p>
       )}
       {locate && (
-        <button type="button" className="locate" onClick={here} disabled={geoBusy}>
-          {geoBusy ? 'Localisation…' : '📍 Utiliser ma position'}
+        <button type="button" className="locate" onClick={geoBusy ? cancelGeo : here}>
+          {geoBusy ? 'Localisation en cours… Annuler' : '📍 Utiliser ma position'}
         </button>
       )}
+      {fromPos && value.lat != null && <p className="hint">Adresse issue de votre position. Taper pour la modifier ou ✕ pour l’effacer.</p>}
       {geoErr && <p className="hint">Position indisponible : saisir l’adresse.</p>}
     </div>
   )
