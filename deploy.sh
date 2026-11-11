@@ -9,6 +9,7 @@ touch dist/.nojekyll
 cd dist
 rm -rf .git
 git init -q -b gh-pages
+git config credential.useHttpPath true   # trousseau : jeton propre à ce dépôt
 git add -A
 git commit -q -m "Déploiement $(date +%F_%H:%M)"
 git push -f "$REMOTE" gh-pages
