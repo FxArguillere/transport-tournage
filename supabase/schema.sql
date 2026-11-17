@@ -26,7 +26,7 @@ create table trips (
   km_total numeric(8,2) not null check (km_total >= 0 and km_total < 2000),
   round_trip boolean not null,
   transport text not null check (transport in ('voiture','bus','train','tram','velo','pied','taxi','moto')),
-  engine text check (engine in ('thermique_hybride','essence','diesel')),
+  engine text check (engine in ('thermique_hybride','hybride','essence','diesel','electrique')),
   carpool boolean not null default false,
   driver_name text check (char_length(driver_name) <= 120),
   location_id uuid references locations(id) on delete set null,

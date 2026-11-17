@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import AddressInput, { FieldHead, useLocate, markPick, recentlyPicked } from './AddressInput.jsx'
 import {
   supabase, TRANSPORTS, TRANSPORT_ICONS, ENGINES, todayStr, titleCase, norm, isActive,
-  routeKm, legTotal, daysBetween, load, save, transportLabel
+  routeKm, legTotal, daysBetween, load, save, transportLabel, isEngine
 } from './lib.js'
 
 const MEM = 'transport.memo'
@@ -80,7 +80,7 @@ function ArrivalPicker({ label, value, onChange, choices }) {
 }
 
 /* ---------- Une étape (un moyen de transport) ---------- */
-function LegEditor({ initial, heading, pos, onPos, legCount, members, onSubmit, onBack, places, submitLabel }) {
+function LegEditor({ initial, heading, pos, onPos, legCount, members, onSubmit, onBack, places, submitLabel, engineNotice }) {
   const [transport, setTransport] = useState(initial.transport || '')
   const [engine, setEngine] = useState(initial.engine || '')
   const [carpool, setCarpool] = useState(!!initial.carpool)
@@ -149,6 +149,7 @@ function LegEditor({ initial, heading, pos, onPos, legCount, members, onSubmit, 
       {isCar && (
         <>
           <label>Type de moteur</label>
+          {engineNotice && <p className="note">Les types de moteur ont changé : choisir à nouveau le moteur de cette voiture. Le reste du trajet est conservé.</p>}
           <div className="seg" role="radiogroup">
             {ENGINES.map(([v, l]) => (
               <label key={v} className={engine === v ? 'on' : ''}>
@@ -309,12 +310,18 @@ export default function Public() {
   }
 
   async function reuse() {
-    const saved = (memo.legs || []).map(l => ({ ...l, start: l.start || emptyAddr, end: l.end || emptyAddr }))
+    // Ancien moteur (« Thermique / hybride ») : effacé pour obliger à le choisir de nouveau
+    const saved = (memo.legs || []).map(l => ({
+      ...l, start: l.start || emptyAddr, end: l.end || emptyAddr,
+      engine: l.transport === 'voiture' && isEngine(l.engine) ? l.engine : ''
+    }))
     setBusy(true)
     const fresh = await Promise.all(saved.map(l =>
       routeKm(l.start, l.end, l.transport).then(km => ({ ...l, oneWay: km })).catch(() => l)))
     setBusy(false)
-    setLegs(fresh); setStep('recap')
+    setLegs(fresh)
+    const missing = fresh.findIndex(l => l.transport === 'voiture' && !l.engine)
+    if (missing >= 0) { setEditIdx(missing); setStep('leg') } else setStep('recap')
   }
 
   async function submit() {
@@ -380,6 +387,7 @@ export default function Public() {
       : first ? { start: memo.legs?.[0]?.start || memo.start || emptyAddr, end: arrival }
       : addPos === 'before' ? { start: emptyAddr, end: legs[0].start }
       : { start: legs[legs.length - 1].end, end: emptyAddr }
+    const engineNotice = editing && legs[editIdx].transport === 'voiture' && !legs[editIdx].engine
     const heading = editing ? 'Modifier ce trajet' : first ? 'Comment êtes-vous venu·e ?' : 'Autre moyen de transport'
     const back = () => {
       if (editing) { setEditIdx(null); setStep('recap') }
@@ -392,7 +400,7 @@ export default function Public() {
         <LegEditor key={`${editIdx}-${addPos}-${legs.length}`} initial={initial} heading={heading}
           pos={editing ? null : addPos} onPos={setAddPos} legCount={legs.length} members={members} onBack={back}
           places={locations}
-          onSubmit={saveLeg} submitLabel={editing ? 'Enregistrer' : 'Continuer'} />
+          onSubmit={saveLeg} submitLabel={editing ? 'Enregistrer' : 'Continuer'} engineNotice={engineNotice} />
       </main>
     )
   }
@@ -416,6 +424,7 @@ export default function Public() {
 
   if (step === 'recap') {
     const n = dates.length
+    const missingEngine = legs.findIndex(l => l.transport === 'voiture' && !l.engine)
     return (
       <main className="wrap">
         <Prog n={3} />
@@ -436,8 +445,9 @@ export default function Public() {
         <p className="hint">Vous ne devrez donc pas réencoder ces trajets. Si de nouveaux modes de transport s’ajoutent à d’autres dates, merci de faire un nouvel encodage.</p>
         <DatePicker days={periodDays} selected={dates} onToggle={toggleDate} today={today} />
         {!n && <p className="err">Cocher au moins un jour.</p>}
+        {missingEngine >= 0 && <p className="err">Préciser le type de moteur de la voiture (Modifier) avant de valider.</p>}
         {error && <p className="err">{error}</p>}
-        <button className="btn" disabled={!n || !legs.length || busy} onClick={submit}>
+        <button className="btn" disabled={!n || !legs.length || busy || missingEngine >= 0} onClick={submit}>
           {busy ? 'Envoi…' : `Valider (${plural(n, 'jour')} · ${plural(legs.length, 'trajet')})`}
         </button>
       </main>

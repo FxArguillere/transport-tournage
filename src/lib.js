@@ -16,10 +16,13 @@ export const TRANSPORT_ICONS = {
   voiture: '🚗', bus: '🚌', train: '🚆', tram: '🚋', velo: '🚲', pied: '🚶', taxi: '🚕', moto: '🛵'
 }
 export const ENGINES = [
-  ['thermique_hybride', 'Thermique / hybride'], ['essence', 'Essence'], ['diesel', 'Diesel']
+  ['hybride', 'Hybride'], ['essence', 'Essence'], ['diesel', 'Diesel'], ['electrique', 'Électrique']
 ]
+// Ancienne valeur, encore présente dans les trajets déjà enregistrés (lecture seule)
+const LEGACY_ENGINES = { thermique_hybride: 'Thermique / hybride' }
 export const transportLabel = v => (TRANSPORTS.find(t => t[0] === v) || [, v])[1]
-export const engineLabel = v => (ENGINES.find(t => t[0] === v) || [, ''])[1]
+export const engineLabel = v => (ENGINES.find(t => t[0] === v) || [, LEGACY_ENGINES[v] || ''])[1]
+export const isEngine = v => ENGINES.some(t => t[0] === v)
 
 export const todayStr = () => {
   const d = new Date()
