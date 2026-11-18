@@ -83,3 +83,5 @@ th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line)}th{col
 
 .fhead{display:flex;justify-content:space-between;align-items:flex-end;gap:8px}
 .fhead .locate{padding:0 0 4px;white-space:nowrap}
+
+.scroll.tall{max-height:420px;overflow:auto}

@@ -175,11 +175,16 @@ function Export() {
   const [to, setTo] = useState(todayStr())
   const [rows, setRows] = useState(null)
   const [err, setErr] = useState('')
+  const [at, setAt] = useState(null)
+  const [busy, setBusy] = useState(false)
 
   async function preview() {
-    setErr('')
-    try { setRows(await fetchTrips(from, to)) } catch (e) { setErr(e.message) }
+    setErr(''); setBusy(true)
+    try { setRows(await fetchTrips(from, to)); setAt(new Date()) } catch (e) { setErr(e.message) }
+    setBusy(false)
   }
+  // Chargement à l'ouverture de l'onglet et à chaque changement de dates (plus besoin de cliquer pour voir les nouveaux trajets)
+  useEffect(() => { preview() }, [from, to])
   function download() {
     const oui = b => (b ? 'Oui' : 'Non')
     const data = rows.map(t => ({
@@ -201,15 +206,15 @@ function Export() {
       <div className="inline end">
         <div><label>Du</label><input className="in" type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
         <div><label>Au</label><input className="in" type="date" value={to} min={from} onChange={e => setTo(e.target.value)} /></div>
-        <button className="btn sm" onClick={preview}>Afficher</button>
+        <button className="btn sm" onClick={preview} disabled={busy}>{busy ? 'Actualisation…' : 'Actualiser'}</button>
         <button className="btn sm sec" disabled={!rows?.length} onClick={download}>Exporter .xlsx</button>
       </div>
       {err && <p className="err">{err}</p>}
       {rows && (
         <>
-          <p className="hint">{rows.length} trajet(s). Aperçu des 50 premiers.</p>
-          <div className="scroll"><table><thead><tr><th>Nom</th><th>Date</th><th>Étape</th><th>Km</th><th>A/R</th><th>Transport</th><th>Covoit.</th></tr></thead>
-            <tbody>{rows.slice(0, 50).map(t => (
+          <p className="hint">{rows.length} trajet(s){rows.length > 300 ? ' (aperçu des 300 premiers ; le fichier Excel contient tout)' : ''} · actualisé à {at?.toLocaleTimeString('fr-BE')}</p>
+          <div className="scroll tall"><table><thead><tr><th>Nom</th><th>Date</th><th>Étape</th><th>Km</th><th>A/R</th><th>Transport</th><th>Covoit.</th></tr></thead>
+            <tbody>{rows.slice(0, 300).map(t => (
               <tr key={t.id}><td>{t.member_name}</td><td>{fr(t.trip_date)}</td><td>{t.leg}/{t.legs_total}</td><td>{Number(t.km_total).toFixed(2)}</td>
                 <td>{t.round_trip ? 'Oui' : 'Non'}</td>
                 <td>{transportLabel(t.transport)}{t.engine ? ` (${engineLabel(t.engine)})` : ''}</td>

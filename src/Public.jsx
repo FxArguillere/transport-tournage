@@ -13,6 +13,10 @@ const plural = (n, w) => `${n} ${w}${n > 1 ? 's' : ''}`
 const dayNum = d => Number(d.slice(8))
 const dayShort = d => new Date(d + 'T12:00:00').toLocaleDateString('fr-BE', { weekday: 'short' }).replace('.', '')
 const isWeekend = d => [0, 6].includes(new Date(d + 'T12:00:00').getDay())
+const stamp = iso => {
+  const d = new Date(iso), z = n => String(n).padStart(2, '0')
+  return `${z(d.getDate())}/${z(d.getMonth() + 1)} à ${z(d.getHours())}h${z(d.getMinutes())}`
+}
 const dayFull = d => `${dayShort(d)} ${d.slice(8)}/${d.slice(5, 7)}`
 const monthLabel = ym => new Date(ym + '-01T12:00:00').toLocaleDateString('fr-BE', { month: 'long', year: 'numeric' })
 
@@ -233,11 +237,12 @@ function DatePicker({ days, selected, onToggle, today }) {
 
 /* ---------- Application ---------- */
 export default function Public() {
-  const memo = useMemo(() => {
+  // « Dernier trajet » : lu au démarrage, puis remplacé à chaque enregistrement réussi
+  const [memo, setMemo] = useState(() => {
     const m = load(MEM) || {}
     const ok = typeof m.name === 'string' && m.name.trim() && !m.name.startsWith('__')
     return ok ? m : {}   // utilisateur non reconnu : pas d'accueil personnalisé
-  }, [])
+  })
   const today = todayStr()
   const [members, setMembers] = useState([])
   const [locations, setLocations] = useState([])
@@ -344,7 +349,12 @@ export default function Public() {
     const { error: err } = await supabase.from('trips').insert(rows)
     setBusy(false)
     if (err) { setError('Enregistrement impossible. Vérifier la connexion puis réessayer.'); return }
-    save(MEM, { name, legs: legs.map(({ transport, engine, carpool, driver, start, end, round, oneWay }) => ({ transport, engine, carpool, driver, start, end, round, oneWay })) })
+    const next = {
+      name, savedAt: new Date().toISOString(), dates: sorted,
+      legs: legs.map(({ transport, engine, carpool, driver, start, end, round, oneWay }) => ({ transport, engine, carpool, driver, start, end, round, oneWay }))
+    }
+    save(MEM, next)
+    setMemo(next)
     setSent(s => [...s, { legs, dates: sorted }])
     setStep('done')
   }
@@ -359,6 +369,10 @@ export default function Public() {
       {memo.legs?.length > 0 && (
         <div className="card hl">
           <b>Reprendre mon dernier trajet</b>
+          {memo.savedAt && (
+            <p className="hint">Enregistré le {stamp(memo.savedAt)}
+              {memo.dates?.length ? ` · ${plural(memo.dates.length, 'jour')} : ${memo.dates.map(d => `${dayNum(d)}/${d.slice(5, 7)}`).join(', ')}` : ''}</p>
+          )}
           {memo.legs.map((l, i) => <LegLine key={i} leg={{ ...l, start: l.start || emptyAddr, end: l.end || emptyAddr }} />)}
           <button className="btn" onClick={reuse} disabled={busy || !loaded}>{busy ? 'Calcul…' : 'Oui, même trajet'}</button>
         </div>
@@ -461,6 +475,7 @@ export default function Public() {
       <div className="okc">✓</div>
       <h1>{last && last.legs.length > 1 ? 'Trajets enregistrés' : 'Trajet enregistré'}</h1>
       <p className="mut">{name}</p>
+      {memo.savedAt && <p className="hint">Enregistré le {stamp(memo.savedAt)}</p>}
       <ul className="recap">
         {sent.map((b, i) => (
           <li key={i}>
